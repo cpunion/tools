@@ -110,6 +110,7 @@ var gorootTestTests = []string{
 
 // These are files in testdata/.
 var testdataTests = []string{
+	"explicit_receiver.go",
 	"boundmeth.go",
 	"complit.go",
 	"convert.go",

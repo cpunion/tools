@@ -969,7 +969,16 @@ func (b *builder) stmtList(fn *Function, list []ast.Stmt) {
 func (b *builder) receiver(fn *Function, e ast.Expr, wantAddr, escaping bool, sel *selection) Value {
 	var v Value
 	if wantAddr && !sel.indirect && !isPointerCore(fn.typeOf(e)) {
-		v = b.addr(fn, e, escaping).address(fn)
+		addr := b.addr(fn, e, escaping)
+		if _, explicitDeref := ast.Unparen(e).(*ast.StarExpr); explicitDeref && sel.kind == types.MethodVal {
+			// Taking the address for a pointer method must not erase an
+			// explicit receiver dereference: (*p).m must panic when p is nil,
+			// even when m itself permits nil. As for &*p, retain a load for
+			// its nil-check effect. Field assignments retain their delayed
+			// store fault and must not acquire this method-selection check.
+			addr.load(fn)
+		}
+		v = addr.address(fn)
 	} else {
 		v = b.expr(fn, e)
 	}
