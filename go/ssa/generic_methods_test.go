@@ -371,6 +371,47 @@ type call struct {
 	targs   int
 }
 
+func TestGenericMethodWrapperCanonicalSignatureIsolation(t *testing.T) {
+	testenv.NeedsGoCommand1Point(t, 27)
+	for _, receiver := range []struct{ declaration, instance string }{
+		{"S", "S"}, {"G[A any]", "G[int]"},
+	} {
+		methodReceiver := receiver.declaration
+		if receiver.instance == "G[int]" {
+			methodReceiver = "G[A]"
+		}
+		for _, wrapper := range []string{receiver.instance + ".M[string]", receiver.instance + "{}.M[string]"} {
+			for _, first := range []string{"method", "function"} {
+				t.Run(wrapper+"/"+first+"-first", func(t *testing.T) {
+					method := "Keep = " + wrapper
+					function := `_ = F[string]("ok")`
+					statements := method + ";" + function
+					if first == "function" {
+						statements = function + ";" + method
+					}
+					pkg := build(t, fmt.Sprintf(`package p
+type %s struct{}
+func (%s) M[T any](values ...T) T { return values[0] }
+func F[T any](values ...T) T { return values[0] }
+var Keep any
+func f() { %s }
+`, receiver.declaration, methodReceiver, statements))
+					for _, block := range pkg.Func("f").Blocks {
+						for _, instruction := range block.Instrs {
+							if call, ok := instruction.(*ssa.Call); ok {
+								callee := call.Common().StaticCallee()
+								if callee == nil || callee.Name() != "F[string]" || callee.Signature.Recv() != nil {
+									t.Fatalf("function instance inherited a method receiver: %v", callee)
+								}
+							}
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
 func build(t *testing.T, src string) *ssa.Package {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "p.go", src, 0)

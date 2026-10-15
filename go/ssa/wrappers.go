@@ -100,7 +100,11 @@ func maybeInstance(prog *Program, name string, sig *types.Signature, targs []typ
 			// validate was false, we should never get an error
 			panic(err)
 		}
-		sig = prog.canon.Type(instSig).(*types.Signature)
+		// Signature identity ignores receivers. Publishing a method signature
+		// in canon can give a later ordinary function instance that receiver,
+		// or substitute a different method's receiver here. As in createInstance,
+		// keep instantiated method signatures outside that canonical map.
+		sig = instSig.(*types.Signature)
 	}
 	return name, sig
 }
